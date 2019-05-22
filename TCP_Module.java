@@ -101,7 +101,7 @@ public class TCP_Module {
 					while(it.hasNext()) {
 						int key=it.next();
 						int id=relativelyid.get(key);
-						System.out.println("在线ID:"+id+"***");  
+						System.out.println("在线ID:"+id+"***");
 					}
 				}
 				try {
@@ -114,17 +114,63 @@ public class TCP_Module {
 		}
 		
 	}
+	public static class isrepeatid implements Runnable{
+		private byte id;
+		private OutputStream os;
+		byte[] repeatid= {metoyou.get(0x01),metoyou.get(0x05)};
+		public isrepeatid(byte id,OutputStream os) {
+			this.id=id;
+			this.os=os;
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			int num=getflag1(id);
+			try {
+				send_data_output.get(id).write("你的ID被人申请绑定".getBytes("utf-8"));
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				relativelyid.remove(num);
+				send_data_output.remove(id);
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				relativelyid.remove(num);
+				send_data_output.remove(id);
+			}finally {
+				try {
+					os.write(repeatid);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+
+		private int getflag1(byte id2) {
+			Set<Integer> keyset=relativelyid.keySet();
+			Iterator<Integer> it=keyset.iterator();
+			while(it.hasNext()) {
+				int key=it.next();
+				if(metoyou.get(relativelyid.get(key))==id2){
+					return key;
+				}
+			}
+			return 0;
+		}
+		
+	}
 	private static class ServerThread implements Runnable{
 		private Socket socket;
 		//相当于id
 		private int num;
 		OutputStream os;
 		InputStream is;
-		private ServerThread selfThread;
 		public ServerThread(Socket socket,int num) {
 			this.socket=socket;
 			this.num=num;
-			selfThread=this;
 		}
 
 		public void run() {
@@ -133,14 +179,14 @@ public class TCP_Module {
 				//创建连接客户端的输入输出流
 				is=socket.getInputStream();
 				os=socket.getOutputStream();
-				byte[] comm= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x03)};
-				byte[] storage_data_success= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x06)};
-				byte[] storage_data_failure= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x07)};
-				byte[] senddata_error= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x04)};
-				byte[] read_data_failure= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x08)};
-				byte[] no_bind_id= {metoyou.get(0x5A),metoyou.get(0x80),metoyou.get(0x03)};
-				byte[] repeatid= {metoyou.get(0x5A),metoyou.get(0x81),metoyou.get(0x05)};
-				byte[] usableid= {metoyou.get(0x5A),metoyou.get(0x81),metoyou.get(0x00)};
+				byte[] comm= {metoyou.get(0x80),metoyou.get(0x03)};
+				byte[] storage_data_success= {metoyou.get(0x80),metoyou.get(0x06)};
+				byte[] storage_data_failure= {metoyou.get(0x80),metoyou.get(0x07)};
+				byte[] senddata_error= {metoyou.get(0x02),metoyou.get(0x04)};
+				byte[] read_data_failure= {metoyou.get(0x80),metoyou.get(0x08)};
+				byte[] no_bind_id= {metoyou.get(0x01),metoyou.get(0x03)};
+				byte[] repeatid= {metoyou.get(0x01),metoyou.get(0x05)};
+				byte[] usableid= {metoyou.get(0x01),metoyou.get(0x00)};
 				byte[] buf=new byte[1024];
 				boolean bind_id=false;
 				int len=0;
@@ -151,34 +197,37 @@ public class TCP_Module {
 				System.out.print(df.format(day)+"*********");  
 				while((len=is.read(buf))!=-1) {
 					//通信测试
-					if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x00)&&
-						buf[2]==metoyou.get(0xA5)&&len==3) {
+					if(buf[0]==metoyou.get(0x00)&&buf[1]==metoyou.get(0xA5)&&len==2) {
 						os.write(comm);
 						System.out.println(buf.toString());
 					}
 					//id绑定
-					else if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x01)&&len==5) {
+					else if(buf[0]==metoyou.get(0x31)&&len==4) {
 						//绑定相对id
-						if(relativelyid.containsValue(youtome.get(buf[4]))) {
+						if(relativelyid.containsValue(youtome.get(buf[3]))) {
+							new Thread(new isrepeatid(buf[3],os)).start();
 							os.write(repeatid);
 						}else {
-							relativelyid.put(num, youtome.get(buf[4]));
+							relativelyid.put(num, youtome.get(buf[3]));
 							os.write(usableid);
-							send_data_output.put(buf[4], os);
+							send_data_output.put(buf[3], os);
 							//绑定绝对Id
-							byte[] arrayabsoluteid= {buf[2],buf[3]};
+							byte[] arrayabsoluteid= {buf[1],buf[2]};
 							absoluteid.put(num, arrayabsoluteid);
 							bind_id=true;//绑定ID成功
 						}
 					}
 					//数据转发
-					else if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x02)&&len>3) {
-						if(relativelyid.containsValue(youtome.get(buf[2]))) {
+					else if(buf[0]==metoyou.get(0x32)&&len>2) {
+						if(relativelyid.containsValue(youtome.get(buf[1]))) {
 							if(bind_id) {
-								byte id=buf[2];
-								buf[1]=metoyou.get(0x00);
-								buf[2]=metoyou.get(relativelyid.get(num));
+								byte id=buf[1];
+								buf[0]=metoyou.get(0x00);
+								buf[1]=metoyou.get(relativelyid.get(num));
 								send_data_output.get(id).write(buf,0, len);//转发数据
+								String data=new String(buf,2,len);
+								System.out.println("ID号为:"+relativelyid.get(num)+"向ID号为:"+youtome.get(id)
+								+"转发数据,数据内容为:"+data);
 							}
 							else {
 								os.write(no_bind_id);//设备没有绑定ID
@@ -188,9 +237,9 @@ public class TCP_Module {
 						}
 					}
 					//数据存储
-					else if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x04)&&len>4) {
+					else if(buf[0]==metoyou.get(0x34)&&len>3) {
 						//获取数据编号
-						byte[] array_data_number= {buf[2],buf[3]};
+						byte[] array_data_number= {buf[1],buf[2]};
 						//查询数据编号是否存在
 						if(data_number_isexist(array_data_number)) {
 							os.write(storage_data_failure);
@@ -212,8 +261,8 @@ public class TCP_Module {
 						}
 						}
 					//读取数据
-					else if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x05)&&len==4) {
-						byte[] array_data_number= {buf[2],buf[3]};
+					else if(buf[0]==metoyou.get(0x35)&&len==3) {
+						byte[] array_data_number= {buf[1],buf[2]};
 						if(data_number_isexist(array_data_number)) {
 							byte[] data=getreaddata(array_data_number,mysql);
 							os.write(data,0,data.length-1);
@@ -223,10 +272,10 @@ public class TCP_Module {
 						}
 					}
 					//IO转发
-					else if(buf[0]==metoyou.get(0x5A)&&buf[1]==metoyou.get(0x03)&&
-							len==6&&(buf[5]==metoyou.get(0x01)||buf[5]==metoyou.get(0x00))) {
-						IO_data[0]=buf[3];
-						IO_data[1]=buf[4];
+					else if(buf[0]==metoyou.get(0x33)&&
+							len==5&&(buf[4]==metoyou.get(0x31)||buf[4]==metoyou.get(0x00))) {
+						IO_data[0]=buf[2];
+						IO_data[1]=buf[3];
 					}
 					}
 				//移除ID
@@ -320,7 +369,7 @@ public class TCP_Module {
 			return true;
 		}
 		//*****************遍历数组找到转发ID*********************************//
-		private int getflag(byte b) {
+		public int getflag(byte b) {
 			Set<Integer> keyset=relativelyid.keySet();
 			Iterator<Integer> it=keyset.iterator();
 			while(it.hasNext()) {
